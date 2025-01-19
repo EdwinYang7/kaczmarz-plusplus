@@ -17,7 +17,6 @@ from sklearn.preprocessing import StandardScaler
 from sklearn.model_selection import train_test_split
 
 from kaczmarz import coordinate_descent_meta #, coordinate_descent, randomized_kaczmarz, calculate_lamda_mu_nu, coordinate_descent_tuned_l2, coordinate_descent_block
-from nystrom_preconditioner import NystromSketch
 
 import pyamg   # for implementation of GMRES
 from utils import rht, fht, symFHT, sketch_or_subsample
@@ -152,7 +151,7 @@ def run_coordinate_descent(A, b, x, x0, t_max, sA, sol_norm, Sf_list, metric="re
 
 
 def find_iters(dists2, flops, accuracy):
-    ### Find the first iteration where error < accuracy
+    """Find the first iteration where error < accuracy"""
     idx = np.where(dists2 < accuracy)[0]
     if idx.size == 0:
         return idx, 0
@@ -183,7 +182,8 @@ def plot_results(
     color_cycle = plt.rcParams["axes.prop_cycle"].by_key()["color"]
     plt.figure(figsize=(20, 5))
 
-    # Plot convergence vs FLOPs
+    ### Plot convergence vs FLOPs
+
     for i in range (4):
         plt.subplot(1, 4, i+1)
         dists2_cg, flops_cg = cg_list[i]
@@ -229,7 +229,8 @@ def plot_results(
 
         plt.legend(fontsize="16", loc="upper right")
 
-    # # Plot convergence vs passes
+    ### Plot convergence vs passes
+
     # plt.subplot(1, 3, 2)
     # plt.semilogy(dists2_cg, label="CG", color=color_cycle[0])
     # plt.semilogy(dists2_gmres, label='GMRES', color=color_cycle[5])
@@ -253,7 +254,8 @@ def plot_results(
 
     plt.tight_layout(rect=[0, 0, 1, 0.95])
 
-    # Overall title
+    ### Overall title
+
     # plt.suptitle(
     #     f"Dataset: {dataset_name}",
     #     # f"Dataset: {dataset_name}, n: {n}, k: {k}, mu: {mu}, runtimes: {num_runs}",
@@ -265,8 +267,8 @@ def plot_results(
 
 
 def main():
-    datasets = ["abalone"]   # "abalone", "phoneme", "california_housing", "covtype", "low_rank"
-    kernel_types = ["gaussian", "laplacian"]   # "gaussian", "laplacian"
+    datasets = ["abalone", "phoneme", "california_housing", "covtype", "low_rank"]
+    kernel_types = ["gaussian", "laplacian"]
     d = 4096
     m = d
     n = d
@@ -288,12 +290,14 @@ def main():
         effective_rank_list = [25, 50, 100, 200]
 
         ### Uncomment the following only for changing accuracy
+
         # with open(f'FLOPs_{dataset_name}.npy', 'rb') as f:
         #     for i in range(4):
         #         cg_list.append(np.load(f))
         #         gmres_list.append(np.load(f))
         #         cd_acc_list.append(np.load(f))
         #         block_acc_list.append(np.load(f))
+
         ###
 
         for kernel_type in kernel_types:
@@ -320,67 +324,69 @@ def main():
                 flops_pre = n**2 / 2 - n / 2
 
                 ### RHT: Hadamard transform step
-                # QA = fht(A)
-                # A = fht(QA.T) / n
                 A, flops_rht = symFHT(A)
                 flops_pre += flops_rht
                 x_ = np.random.randn(n)
                 b = A @ x_
                 x0 = np.zeros(n)
+
+                sA = 0   # no need to compute for residual
+                sol_norm = np.linalg.norm(b)   # uncomment below lines only if metric="A-norm"
                 # U, s, VT = svd(A)
                 # kappas = (1 / s[-1]) * s
                 # sA = U @ np.diag(np.sqrt(s)) @ VT
-                sA = 0   # no need to compute
-                sol_norm = np.linalg.norm(b)
                 # sol_norm = np.linalg.norm(sA @ x_) ** 2
 
-                # Sf = sketch_or_subsample(A, k, sketch='uniform')
+                Sf_list = [SubsamplingSketchFactory((k, n)) for _ in range(num_runs)]
 
-                # Sf_list = [SubsamplingSketchFactory((k, n)) for _ in range(num_runs)]
+                dists2_cg, flops_cg = run_cg(A, b, x_, x0, t_max, sA, sol_norm, accuracy=accuracy)
+                dists2_gmres, flops_gmres = run_gmres(A, b, x_, x0, t_max, sA, sol_norm, accuracy=accuracy)
+                dists2_cd_acc, dists2_block_acc, flops_cd_acc, flops_block_acc = run_coordinate_descent(A, b, x_, x0, t_max_cd, sA, sol_norm, Sf_list, accuracy=accuracy)
 
-                # dists2_cg, flops_cg = run_cg(A, b, x_, x0, t_max, sA, sol_norm, accuracy=accuracy)
-                # dists2_gmres, flops_gmres = run_gmres(A, b, x_, x0, t_max, sA, sol_norm, accuracy=accuracy)
-                # dists2_cd_acc, dists2_block_acc, flops_cd_acc, flops_block_acc = run_coordinate_descent(A, b, x_, x0, t_max_cd, sA, sol_norm, Sf_list, accuracy=accuracy)
+                flops_cd_acc += flops_pre
+                flops_block_acc += flops_pre
 
-                # flops_cd_acc += flops_pre
-                # flops_block_acc += flops_pre
-
-                # cg_list.append((dists2_cg, flops_cg))
-                # gmres_list.append((dists2_gmres, flops_gmres))
-                # cd_acc_list.append((dists2_cd_acc, flops_cd_acc))
-                # block_acc_list.append((dists2_block_acc, flops_block_acc))
+                cg_list.append((dists2_cg, flops_cg))
+                gmres_list.append((dists2_gmres, flops_gmres))
+                cd_acc_list.append((dists2_cd_acc, flops_cd_acc))
+                block_acc_list.append((dists2_block_acc, flops_block_acc))
 
                 ### Uncomment the following only for changing accuracy
+
                 # dists2_cg, flops_cg = cg_list.pop(0)
                 # dists2_gmres, flops_gmres = gmres_list.pop(0)
                 # dists2_cd_acc, flops_cd_acc = cd_acc_list.pop(0)
                 # dists2_block_acc, flops_block_acc = block_acc_list.pop(0)
+
                 ###
 
-                # idx_cg, flops_cg_idx = find_iters(dists2_cg, flops_cg, accuracy)
-                # idx_gmres, flops_gmres_idx = find_iters(dists2_gmres, flops_gmres, accuracy)
-                # idx_cd_acc, flops_cd_acc_idx = find_iters(dists2_cd_acc, flops_cd_acc, accuracy)
-                # idx_block_acc, flops_block_acc_idx = find_iters(dists2_block_acc, flops_block_acc, accuracy)
+                idx_cg, flops_cg_idx = find_iters(dists2_cg, flops_cg, accuracy)
+                idx_gmres, flops_gmres_idx = find_iters(dists2_gmres, flops_gmres, accuracy)
+                idx_cd_acc, flops_cd_acc_idx = find_iters(dists2_cd_acc, flops_cd_acc, accuracy)
+                idx_block_acc, flops_block_acc_idx = find_iters(dists2_block_acc, flops_block_acc, accuracy)
 
-                # print(f"Dataset: {dataset_name}, kernel: {kernel_type}, width: {gamma}, accuracy: {accuracy}, FLOPs for CG: {flops_cg_idx}, FLOPs for GMRES: {flops_gmres_idx}, FLOPs for CD+Accel: {flops_cd_acc_idx}, FLOPs for CD++: {flops_block_acc_idx}")
+                print(f"Dataset: {dataset_name}, kernel: {kernel_type}, width: {gamma}, accuracy: {accuracy}, FLOPs for CG: {flops_cg_idx}, FLOPs for GMRES: {flops_gmres_idx}, FLOPs for CD+Accel: {flops_cd_acc_idx}, FLOPs for CD++: {flops_block_acc_idx}")
 
         ### Save the distance data
-        # with open(f'FLOPs_{dataset_name}.npy', 'wb') as f:
-        #     for i in range(4):
-        #         np.save(f, cg_list[i])
-        #         np.save(f, gmres_list[i])
-        #         np.save(f, cd_acc_list[i])
-        #         np.save(f, block_acc_list[i])
+
+        with open(f'FLOPs_{dataset_name}.npy', 'wb') as f:
+            for i in range(4):
+                np.save(f, cg_list[i])
+                np.save(f, gmres_list[i])
+                np.save(f, cd_acc_list[i])
+                np.save(f, block_acc_list[i])
 
         ### Open the distance data
-        with open(f'FLOPs_{dataset_name}.npy', 'rb') as f:
-            for i in range(4):
-                cg_list.append(np.load(f))
-                gmres_list.append(np.load(f))
-                cd_acc_list.append(np.load(f))
-                block_acc_list.append(np.load(f))
 
-        # Plot and save results
+        # with open(f'FLOPs_{dataset_name}.npy', 'rb') as f:
+        #     for i in range(4):
+        #         cg_list.append(np.load(f))
+        #         gmres_list.append(np.load(f))
+        #         cd_acc_list.append(np.load(f))
+        #         block_acc_list.append(np.load(f))
+
+
+        ### Plot and save results
         filename = f"FLOPs_{dataset_name}.png"
         plot_results(
             cg_list,
