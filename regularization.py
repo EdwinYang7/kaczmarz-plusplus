@@ -155,7 +155,7 @@ def main():
     n = d
     mu = 1e-3
     k = 200
-    num_runs = 5  # 10
+    num_runs = 1  # 5
     np.random.seed(0)
 
     reg_values = np.logspace(-2, -10, num=5)
