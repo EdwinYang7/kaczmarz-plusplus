@@ -16,7 +16,6 @@ from sklearn.datasets import (
 
 from sklearn.metrics.pairwise import rbf_kernel, laplacian_kernel
 from sklearn.preprocessing import StandardScaler
-from sklearn.model_selection import train_test_split
 from utils import rht, fht, symFHT, sketch_or_subsample
 from kaczmarz import coordinate_descent_meta
 
@@ -24,11 +23,11 @@ from psd_flops import load_dataset, setup_system
 
 
 def compute_kernel(X, kernel_type, **kwargs):
-    if kernel_type == 'gaussian':
-        gamma = kwargs.get('gamma', 1e-1)   # 2.0**(-5), 2.0**(-3), 1e-2
+    if kernel_type == "gaussian":
+        gamma = kwargs.get("gamma", 1e-1)   # 2.0**(-5), 2.0**(-3), 1e-2
         A0 = rbf_kernel(X, gamma=gamma)
-    elif kernel_type == 'laplacian':
-        gamma = kwargs.get('gamma', 1e-1)   # 2.0**(-7), 2.0**(-3), 1e-2
+    elif kernel_type == "laplacian":
+        gamma = kwargs.get("gamma", 1e-1)   # 2.0**(-7), 2.0**(-3), 1e-2
         A0 = laplacian_kernel(X, gamma=gamma)
     return A0
 
@@ -65,7 +64,8 @@ def run_coordinate_descent(A, b, x, x0, t_max, sA, sol_norm, k, Sf_list, metric=
         # dists2_cd_block_runs.append(dists2_cd_block)
         dists2_cd_block_acc_runs.append(dists2_cd_block_acc)
 
-    # Average over runs
+    ### Average over runs
+
     # dists2_cd_avg = np.mean(dists2_cd_runs, axis=0)
     # dists2_cd_acc_avg = np.mean(dists2_cd_acc_runs, axis=0)
     # dists2_cd_block_avg = np.mean(dists2_cd_block_runs, axis=0)
@@ -136,7 +136,8 @@ def plot_results(
 
     plt.tight_layout(rect=[0, 0, 1, 0.95])
 
-    # Overall title including dataset, kernel, mu
+    ### Overall title including dataset, kernel, mu
+
     plt.suptitle(
         f"Dataset: {dataset_name}",
         fontsize=20,
@@ -147,7 +148,7 @@ def plot_results(
 
 
 def main():
-    datasets = ["abalone", "phoneme", "california_housing", "covtype", "low_rank"] # "abalone", "phoneme", "california_housing", "covtype", "low_rank"
+    datasets = ["abalone", "phoneme", "california_housing", "covtype", "low_rank"]
     kernel_types = ["gaussian", "laplacian"]
     d = 4096
     m = d
@@ -184,32 +185,24 @@ def main():
                 random_signs = np.random.choice([-1, 1], size=n)
                 D = np.diag(random_signs)
                 A = D @ A @ D
-                # flops_pre = n**2 / 2 - n / 2
 
                 ### RHT: Hadamard transform step
-                # QA = fht(A)
-                # A = fht(QA.T) / n
                 A, flops_rht = symFHT(A)
-                # flops_pre += flops_rht
                 x_ = np.random.randn(n)
                 b = A @ x_
                 x0 = np.zeros(n)
+                
+                sA = 0
+                sol_norm = np.linalg.norm(b)
                 # U, s, VT = svd(A)
                 # kappas = (1 / s[-1]) * s
                 # sA = U @ np.diag(np.sqrt(s)) @ VT
-
-                sA = 0
-                sol_norm = np.linalg.norm(b)
                 # sol_norm = np.linalg.norm(sA @ x_) ** 2
 
-                # Sf = sketch_or_subsample(A, k, sketch='uniform')
                 Sf_list = [SubsamplingSketchFactory((k, n)) for _ in range(num_runs)]
-                sketch_method = 'Uniform Sampling'
             
                 dists2_cd_block_acc = run_coordinate_descent(A, b, x_, x0, t_max, sA, sol_norm, k, Sf_list, metric="residual")
-
                 dists2_cd_reg = run_coordinate_descent_with_reg(A, b, x_, x0, t_max, sA, sol_norm, Sf_list, reg_values, metric="residual")
-
                 dists2_cd_reg_list.append(dists2_cd_reg)
                 dists2_cd_block_acc_list.append(dists2_cd_block_acc)
 
