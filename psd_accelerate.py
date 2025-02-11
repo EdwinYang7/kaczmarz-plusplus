@@ -1,10 +1,6 @@
 import numpy as np
 import random
 from tqdm import tqdm
-
-from sketch import SubsamplingSketchFactory   # Sketch, SketchFactory, GaussianSketchFactory
-from scipy.linalg import svd, sqrtm, cholesky, solve_triangular
-
 from matplotlib import pyplot as plt
 from scipy.sparse.linalg import cg
 from sklearn.datasets import (
@@ -14,9 +10,12 @@ from sklearn.datasets import (
     make_low_rank_matrix
 )
 
+from scipy.linalg import svd, sqrtm, cholesky, solve_triangular
 from sklearn.metrics.pairwise import rbf_kernel, laplacian_kernel
 from sklearn.preprocessing import StandardScaler
-from utils import rht, fht, symFHT, sketch_or_subsample
+
+from sketch import SubsamplingSketchFactory   # Sketch, SketchFactory, GaussianSketchFactory
+from utils import symFHT
 from kaczmarz import coordinate_descent_meta   # coordinate_descent, coordinate_descent_tuned_l2, coordinate_descent_block
 
 
@@ -47,6 +46,7 @@ def load_dataset(name, d, effective_rank=100):
 
 
 def compute_kernel(X, kernel_type, **kwargs):
+    """Construct kernel matrix for benchmark dataset."""
     if kernel_type == "gaussian":
         gamma = kwargs.get("gamma", 1e-1)
         A0 = rbf_kernel(X, gamma=gamma)
@@ -57,14 +57,16 @@ def compute_kernel(X, kernel_type, **kwargs):
 
 
 def setup_system(A0, mu):
+    """Set up regularized linear system for benchmark dataset."""
     n = A0.shape[0]
     A1 = mu * np.eye(n)
     A = A0 + A1
     return A
 
 
-def run_coordinate_descent(A, b, x, x0, t_max, sA, sol_norm, Sf_list, metric="A-norm"):
-    num_runs = len(Sf_list)
+def run_coordinate_descent(A, b, x, x0, t_max, sA, sol_norm, Sf_list, metric="residual"):
+    """Run CD++ with/without acceleration, with/without block memoization."""
+    num_runs = len(Sf_list)   # Number of multiple runs
     dists2_cd_runs = []
     dists2_cd_acc_runs = []
     dists2_cd_block_runs = []
@@ -145,9 +147,9 @@ def plot_results(
         plt.semilogy(ts, dists2_cd_block, label="CD+Memo", color="crimson")
         plt.semilogy(ts, dists2_cd_acc, label="CD+Accel", color="turquoise")   # , linestyle="--"
         plt.semilogy(ts, dists2_cd_block_acc, label="Full CD++", color="royalblue")   # , linestyle=":"
-        plt.xlabel("Iterations", fontsize=15) 
-        # plt.ylabel("Squared distance to solution $\|x_t - x\|_A^2 / \|x\|_A^2$")
+        plt.xlabel("Iterations", fontsize=15)
         plt.ylabel("Residual $\|A x_t - b\| / \|b\|$", fontsize=15)
+        # plt.ylabel("Squared distance to solution $\|x_t - x\|_A^2 / \|x\|_A^2$")
         plt.title(f"block size={k_list[i]}", fontsize=15)
         plt.ylim(1e-7, 1e0)
         plt.legend(fontsize="16", loc="upper right")
@@ -195,8 +197,8 @@ def main():
 
     for dataset_name in datasets:
         for kernel_type in kernel_types:
-            for gamma in [1e-1, 1e-2]:   # 1e-1, 1e-2
-                k_list = [25, 50, 100, 200]   # [10, 25, 50, 100]
+            for gamma in [1e-1, 1e-2]:
+                k_list = [25, 50, 100, 200]
                 t_max_list = []
                 dists2_cd_list = []
                 dists2_cd_acc_list = []

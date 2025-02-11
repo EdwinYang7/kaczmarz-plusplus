@@ -1,12 +1,6 @@
 import numpy as np
-import random
 from tqdm import tqdm
-
-from sketch import Sketch, SketchFactory, GaussianSketchFactory, SubsamplingSketchFactory
-from scipy.linalg import svd, sqrtm, cholesky, solve_triangular
-
 from matplotlib import pyplot as plt
-from scipy.sparse.linalg import cg
 from sklearn.datasets import (
     fetch_california_housing,
     fetch_covtype,
@@ -16,20 +10,11 @@ from sklearn.datasets import (
 
 from sklearn.metrics.pairwise import rbf_kernel, laplacian_kernel
 from sklearn.preprocessing import StandardScaler
-from utils import rht, fht, symFHT, sketch_or_subsample
+
+from sketch import SubsamplingSketchFactory
+from utils import symFHT
 from kaczmarz import coordinate_descent_meta
-
-from psd_flops import load_dataset, setup_system
-
-
-def compute_kernel(X, kernel_type, **kwargs):
-    if kernel_type == "gaussian":
-        gamma = kwargs.get("gamma", 1e-1)   # 2.0**(-5), 2.0**(-3), 1e-2
-        A0 = rbf_kernel(X, gamma=gamma)
-    elif kernel_type == "laplacian":
-        gamma = kwargs.get("gamma", 1e-1)   # 2.0**(-7), 2.0**(-3), 1e-2
-        A0 = laplacian_kernel(X, gamma=gamma)
-    return A0
+from psd_accelerate import load_dataset, compute_kernel, setup_system
 
 
 def run_coordinate_descent(A, b, x, x0, t_max, sA, sol_norm, k, Sf_list, metric="residual"):

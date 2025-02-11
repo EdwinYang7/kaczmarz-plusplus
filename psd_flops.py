@@ -1,5 +1,4 @@
 import numpy as np
-from numpy.linalg import norm
 from matplotlib import pyplot as plt
 from scipy.linalg import svd, sqrtm
 from scipy.sparse.linalg import cg
@@ -10,62 +9,18 @@ from sklearn.datasets import (
     make_low_rank_matrix
 )
 
-from sketch import Sketch, SketchFactory, GaussianSketchFactory, SubsamplingSketchFactory
-
 from sklearn.metrics.pairwise import rbf_kernel, laplacian_kernel
 from sklearn.preprocessing import StandardScaler
-from sklearn.model_selection import train_test_split
-
-from kaczmarz import coordinate_descent_meta #, coordinate_descent, randomized_kaczmarz, calculate_lamda_mu_nu, coordinate_descent_tuned_l2, coordinate_descent_block
-
 import pyamg   # for implementation of GMRES
-from utils import rht, fht, symFHT, sketch_or_subsample
 
-
-def load_dataset(name, d, effective_rank=200):
-    """Load and preprocess the dataset."""
-    if name == "california_housing":
-        data = fetch_california_housing()
-    elif name == "covtype":
-        data = fetch_covtype()
-    elif name == "abalone":
-        data = fetch_openml(data_id=720, as_frame=False, parser="liac-arff")
-    elif name == "phoneme":
-        data = fetch_openml(data_id=1489, as_frame=False)
-
-    if name == "low_rank":
-        X = make_low_rank_matrix(n_samples=d, n_features=d, effective_rank=effective_rank,tail_strength=0.01)
-        A = X @ X.T + 1e-3 * np.eye(d)
-        return A
-    
-    else:
-        X, y = data.data, data.target
-        X = X[:d, :]
-        b = y[:d]
-        # b = b / np.linalg.norm(b)
-        scaler = StandardScaler()
-        X_normalized = scaler.fit_transform(X)
-        return X_normalized, b
-
-
-def compute_kernel(X, kernel_type, **kwargs):
-    if kernel_type == 'gaussian':
-        gamma = kwargs.get('gamma', 1e-1)   # 2.0**(-5), 2.0**(-3), 1e-2
-        A0 = rbf_kernel(X, gamma=gamma)
-    elif kernel_type == 'laplacian':
-        gamma = kwargs.get('gamma', 1e-1)   # 2.0**(-7), 2.0**(-3), 1e-2
-        A0 = laplacian_kernel(X, gamma=gamma)
-    return A0
-
-
-def setup_system(A0, mu):
-    n = A0.shape[0]
-    A1 = mu * np.eye(n)
-    A = A0 + A1
-    return A
+from sketch import SubsamplingSketchFactory
+from utils import symFHT
+from kaczmarz import coordinate_descent_meta
+from psd_accelerate import load_dataset, compute_kernel, setup_system
 
 
 def run_cg(A, b, x, x0, pass_max, sA, sol_norm, metric="residual", accuracy=1):
+    """Run CG and compute FLOPs."""
     n = A.shape[0]
     niter = 0
     X_cg = np.zeros((pass_max, n))
@@ -90,6 +45,7 @@ def run_cg(A, b, x, x0, pass_max, sA, sol_norm, metric="residual", accuracy=1):
 
 
 def run_gmres(A, b, x, x0, pass_max, sA, sol_norm, metric="residual", accuracy=1):
+    """Run GMRES and compute FLOPs."""
     n = A.shape[0]
     niter = 0
     X_gmres = np.zeros((pass_max, n))
@@ -113,14 +69,7 @@ def run_gmres(A, b, x, x0, pass_max, sA, sol_norm, metric="residual", accuracy=1
 
 
 def run_coordinate_descent(A, b, x, x0, t_max, sA, sol_norm, Sf_list, metric="residual", accuracy=1):
-    # flops_cd_per_iter = 1 * k**3 / 3 + 2 * n * k + 9 * k
-    # flops_cd = np.arange(t_max + 1) * flops_cd_per_iter
-
-    # flops_per_iter_cd_heuristic = 2 * k**3 / 3 + 2 * n * k + 5 * k + 6 * n
-    # flops_cd_heuristic = np.arange(t_max + 1) * flops_per_iter_cd_heuristic
-
-    # X_cd, flops_cd = coordinate_descent_meta(A, b, x0, Sf, t_max, accelerated=False, block=False)
-
+    """Run CD++ with/without block memoization and compute FLOPs."""
     num_runs = len(Sf_list)
     dists2_cd_acc_runs = []
     dists2_block_acc_runs = []
@@ -132,18 +81,17 @@ def run_coordinate_descent(A, b, x, x0, t_max, sA, sol_norm, Sf_list, metric="re
         X_block_acc, flops_block_acc = coordinate_descent_meta(A, b, x0, Sf, t_max, reg=1e-8)
 
         if metric == "A-norm":
-            # dists2_cd = (1/sol_norm) * np.linalg.norm((X_cd - x[None, :]) @ sA, axis=1) ** 2
             dists2_cd_acc = (1/sol_norm) * np.linalg.norm((X_cd_acc - x[None, :]) @ sA, axis=1) ** 2
             dists2_block_acc = (1/sol_norm) * np.linalg.norm((X_block_acc - x[None, :]) @ sA, axis=1) ** 2
+
         elif metric == "residual":
-            # dists2_cd = (1/sol_norm) * np.linalg.norm(X_cd @ A - b[None, :], axis=1)
             dists2_cd_acc = (1/sol_norm) * np.linalg.norm(X_cd_acc @ A - b[None, :], axis=1)
             dists2_block_acc = (1/sol_norm) * np.linalg.norm(X_block_acc @ A - b[None, :], axis=1)
         
         dists2_cd_acc_runs.append(dists2_cd_acc)
         dists2_block_acc_runs.append(dists2_block_acc)
 
-    # Average over runs
+    ### Average over runs
     dists2_cd_acc_avg = np.mean(dists2_cd_acc_runs, axis=0)
     dists2_block_acc_avg = np.mean(dists2_block_acc_runs, axis=0)
 
@@ -151,7 +99,7 @@ def run_coordinate_descent(A, b, x, x0, t_max, sA, sol_norm, Sf_list, metric="re
 
 
 def find_iters(dists2, flops, accuracy):
-    """Find the first iteration where error < accuracy"""
+    """Find the first iteration where error < accuracy."""
     idx = np.where(dists2 < accuracy)[0]
     if idx.size == 0:
         return idx, 0
