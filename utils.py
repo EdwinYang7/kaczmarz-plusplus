@@ -109,23 +109,6 @@ def symFHT(A):
     return np.block([[M11, M12], [M12.T, M22]]), flops
 
 
-# A = np.array([
-#     [4, 2, 1, 0],
-#     [2, 4, 2, 1],
-#     [1, 2, 4, 2],
-#     [0, 1, 2, 4]
-# ])
-
-# print(symFHT(A))
-
-# n = A.shape[0]
-# indices = np.arange(n)
-# QA = fht(indices, A)
-# A = fht(indices, QA.T)
-
-# print(A)
-
-
 def sketch_or_subsample(A, k, sketch, lam=0):   # lam controls the weight of uniform sampling
     n = A.shape[0]
     if sketch == 'gaussian':

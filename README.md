@@ -1,8 +1,10 @@
 ## Kaczmarz++
-This is the public code repository for *Randomized Kaczmarz Methods with Beyond-Krylov Convergence*, a paper by Jiaming Yang, Michał Dereziński, Elizaveta Rebrova and Deanna Needell.
+This is the public code repository for *Randomized Kaczmarz Methods with Beyond-Krylov Convergence* (<https://arxiv.org/abs/2501.11673>), a paper by Michał Dereziński, Elizaveta Rebrova, Deanna Needell and Jiaming Yang.
 This repository contains Python code to recreate the paper's experiments, as well as the exact experimental data that generated our plots.
 + `psd_accelerate.py` corresponds to the convergence testing experiments in Section 6.2 and Supplement 4.1. It generates Figure 1 in main paper, as well as Figure SM1, SM2, SM3 in supplement.
 + `psd_flops.py` corresponds to the comparison with Krylov subspace methods experiments (in terms of FLOPs) in Section 6.3 and Supplement 4.2. It generates Figure 2 in main paper, as well as Figure SM4 and Table SM1 in supplement.
 + `regularization.py` corresponds to the regularization testing in projection experiments in Supplement 4.3. It generates Figure SM5 in supplement.
 
-For the regeneration of plots, the code assume that all the `.npy` files are stored locally in the same directory as `psd_accelerate.py`, `psd_flops.py` and `regularization.py`.
+For the regeneration of plots, the code assume that all the `.npy` files, which contain the iteration information needed to compute the residual, are stored locally in the same directory as `psd_accelerate.py`, `psd_flops.py` and `regularization.py`. Each of the above three scripts contains the process of (1) load and preprocess datasets, (2) construct kernel matrices for real-world datasets, (3) set up linear systems and (4) solving linear systems using different variants of our method (CD++) with comparison to Krylov-type methods (CG, GMRES).
+
+The implementation of different variants of CD++ can be found in the `coordinate_descent_meta` funtion under `kaczmarz.py`. In this function there are two Boolean variants with default values `accelerated=True` and `block=True`, meaning the usage of *adaptive acceleration* and *block memoization* respectively. By setting these two variants differently, the funtion recovers different solvers, as shown in Table 1 of the paper. The implementation of *fast symmetric Hadamard transform* can be found in the `symFHT` function under `utils.py`, which can be of independent interests.
