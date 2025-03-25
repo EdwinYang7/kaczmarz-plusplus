@@ -1,7 +1,7 @@
 import numpy as np
 from matplotlib import pyplot as plt
 from scipy.sparse.linalg import cg
-from scipy.linalg import svd, sqrtm
+from scipy.linalg import svd
 import pyamg   # for implementation of GMRES
 
 from sketch import SubsamplingSketchFactory
