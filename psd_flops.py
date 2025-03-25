@@ -1,16 +1,7 @@
 import numpy as np
 from matplotlib import pyplot as plt
-from scipy.linalg import svd, sqrtm
 from scipy.sparse.linalg import cg
-from sklearn.datasets import (
-    fetch_california_housing,
-    fetch_covtype,
-    fetch_openml,
-    make_low_rank_matrix
-)
-
-from sklearn.metrics.pairwise import rbf_kernel, laplacian_kernel
-from sklearn.preprocessing import StandardScaler
+from scipy.linalg import svd, sqrtm
 import pyamg   # for implementation of GMRES
 
 from sketch import SubsamplingSketchFactory
@@ -41,7 +32,6 @@ def run_cg(A, b, x, x0, pass_max, sA, sol_norm, metric="residual", accuracy=1):
         dists2_cg = (1 / sol_norm) * np.linalg.norm(X_cg[:niter, :] @ A - b[None, :], axis=1)
 
     return dists2_cg, np.array(flops_cg)
-    
 
 
 def run_gmres(A, b, x, x0, pass_max, sA, sol_norm, metric="residual", accuracy=1):
@@ -227,6 +217,8 @@ def main():
     t_max = int(pass_max * m / k)
     t_max_cd = int(5 * pass_max * m / k)
     accuracy = 1e-8
+    mode = "write"   # or "read"
+    metric = "residual"   # or "A-norm"
     np.random.seed(0)
 
     for dataset_name in datasets:
@@ -237,16 +229,14 @@ def main():
         name_list = []
         effective_rank_list = [25, 50, 100, 200]
 
-        ### Uncomment the following only for changing accuracy
-
-        # with open(f'FLOPs_{dataset_name}.npy', 'rb') as f:
-        #     for i in range(4):
-        #         cg_list.append(np.load(f))
-        #         gmres_list.append(np.load(f))
-        #         cd_acc_list.append(np.load(f))
-        #         block_acc_list.append(np.load(f))
-
-        ###
+        if mode == "read":   # Open the distance data
+            with open(f'FLOPs_{dataset_name}.npy', 'rb') as f:
+                for i in range(4):
+                    cg_list.append(np.load(f))
+                    gmres_list.append(np.load(f))
+                    cd_acc_list.append(np.load(f))
+                    block_acc_list.append(np.load(f))
+                    
 
         for kernel_type in kernel_types:
             for gamma in [1e-1, 1e-2]:
@@ -258,9 +248,6 @@ def main():
                 else:
                     print(f"Running on dataset: {dataset_name}, kernel: {kernel_type}, width: {gamma}, regularization: {mu}")
                     X_normalized, b = load_dataset(dataset_name, d)
-                    # k = k_values.get(dataset_name, {}).get(kernel_type, 200)
-                    # t_max = int(pass_max * m / k)
-
                     A0 = compute_kernel(X_normalized, kernel_type, gamma=gamma)
                     A = setup_system(A0, mu)
 
@@ -278,35 +265,35 @@ def main():
                 b = A @ x_
                 x0 = np.zeros(n)
 
-                sA = 0   # no need to compute for residual
-                sol_norm = np.linalg.norm(b)   # uncomment below lines only if metric="A-norm"
-                # U, s, VT = svd(A)
-                # kappas = (1 / s[-1]) * s
-                # sA = U @ np.diag(np.sqrt(s)) @ VT
-                # sol_norm = np.linalg.norm(sA @ x_) ** 2
+                sA = 0
+                sol_norm = np.linalg.norm(b)
+
+                if metric == "A-norm":
+                    U, s, VT = svd(A)
+                    kappas = (1 / s[-1]) * s
+                    sA = U @ np.diag(np.sqrt(s)) @ VT
+                    sol_norm = np.linalg.norm(sA @ x_) ** 2
 
                 Sf_list = [SubsamplingSketchFactory((k, n)) for _ in range(num_runs)]
 
-                dists2_cg, flops_cg = run_cg(A, b, x_, x0, t_max, sA, sol_norm, accuracy=accuracy)
-                dists2_gmres, flops_gmres = run_gmres(A, b, x_, x0, t_max, sA, sol_norm, accuracy=accuracy)
-                dists2_cd_acc, dists2_block_acc, flops_cd_acc, flops_block_acc = run_coordinate_descent(A, b, x_, x0, t_max_cd, sA, sol_norm, Sf_list, accuracy=accuracy)
+                if mode == "write":
+                    dists2_cg, flops_cg = run_cg(A, b, x_, x0, t_max, sA, sol_norm, accuracy=accuracy)
+                    dists2_gmres, flops_gmres = run_gmres(A, b, x_, x0, t_max, sA, sol_norm, accuracy=accuracy)
+                    dists2_cd_acc, dists2_block_acc, flops_cd_acc, flops_block_acc = run_coordinate_descent(A, b, x_, x0, t_max_cd, sA, sol_norm, Sf_list, accuracy=accuracy)
 
-                flops_cd_acc += flops_pre
-                flops_block_acc += flops_pre
+                    flops_cd_acc += flops_pre
+                    flops_block_acc += flops_pre
 
-                cg_list.append((dists2_cg, flops_cg))
-                gmres_list.append((dists2_gmres, flops_gmres))
-                cd_acc_list.append((dists2_cd_acc, flops_cd_acc))
-                block_acc_list.append((dists2_block_acc, flops_block_acc))
+                    cg_list.append((dists2_cg, flops_cg))
+                    gmres_list.append((dists2_gmres, flops_gmres))
+                    cd_acc_list.append((dists2_cd_acc, flops_cd_acc))
+                    block_acc_list.append((dists2_block_acc, flops_block_acc))
 
-                ### Uncomment the following only for changing accuracy
-
-                # dists2_cg, flops_cg = cg_list.pop(0)
-                # dists2_gmres, flops_gmres = gmres_list.pop(0)
-                # dists2_cd_acc, flops_cd_acc = cd_acc_list.pop(0)
-                # dists2_block_acc, flops_block_acc = block_acc_list.pop(0)
-
-                ###
+                elif mode == "read":
+                    dists2_cg, flops_cg = cg_list.pop(0)
+                    dists2_gmres, flops_gmres = gmres_list.pop(0)
+                    dists2_cd_acc, flops_cd_acc = cd_acc_list.pop(0)
+                    dists2_block_acc, flops_block_acc = block_acc_list.pop(0)
 
                 idx_cg, flops_cg_idx = find_iters(dists2_cg, flops_cg, accuracy)
                 idx_gmres, flops_gmres_idx = find_iters(dists2_gmres, flops_gmres, accuracy)
@@ -315,23 +302,13 @@ def main():
 
                 print(f"Dataset: {dataset_name}, kernel: {kernel_type}, width: {gamma}, accuracy: {accuracy}, FLOPs for CG: {flops_cg_idx}, FLOPs for GMRES: {flops_gmres_idx}, FLOPs for CD+Accel: {flops_cd_acc_idx}, FLOPs for CD++: {flops_block_acc_idx}")
 
-        ### Save the distance data
-
-        with open(f'FLOPs_{dataset_name}.npy', 'wb') as f:
-            for i in range(4):
-                np.save(f, cg_list[i])
-                np.save(f, gmres_list[i])
-                np.save(f, cd_acc_list[i])
-                np.save(f, block_acc_list[i])
-
-        ### Open the distance data
-
-        # with open(f'FLOPs_{dataset_name}.npy', 'rb') as f:
-        #     for i in range(4):
-        #         cg_list.append(np.load(f))
-        #         gmres_list.append(np.load(f))
-        #         cd_acc_list.append(np.load(f))
-        #         block_acc_list.append(np.load(f))
+        if mode == "write":   #  Save the distance data
+            with open(f'FLOPs_{dataset_name}.npy', 'wb') as f:
+                for i in range(4):
+                    np.save(f, cg_list[i])
+                    np.save(f, gmres_list[i])
+                    np.save(f, cd_acc_list[i])
+                    np.save(f, block_acc_list[i])
 
 
         ### Plot and save results

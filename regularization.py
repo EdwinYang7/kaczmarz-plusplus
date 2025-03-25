@@ -1,15 +1,7 @@
 import numpy as np
 from tqdm import tqdm
 from matplotlib import pyplot as plt
-from sklearn.datasets import (
-    fetch_california_housing,
-    fetch_covtype,
-    fetch_openml,
-    make_low_rank_matrix
-)
-
-from sklearn.metrics.pairwise import rbf_kernel, laplacian_kernel
-from sklearn.preprocessing import StandardScaler
+from scipy.linalg import svd
 
 from sketch import SubsamplingSketchFactory
 from utils import symFHT
@@ -141,6 +133,7 @@ def main():
     mu = 1e-3
     k = 200
     num_runs = 1  # 5
+    metric = "residual"   # or "A-norm"
     np.random.seed(0)
 
     reg_values = np.logspace(-2, -10, num=5)
@@ -179,15 +172,17 @@ def main():
                 
                 sA = 0
                 sol_norm = np.linalg.norm(b)
-                # U, s, VT = svd(A)
-                # kappas = (1 / s[-1]) * s
-                # sA = U @ np.diag(np.sqrt(s)) @ VT
-                # sol_norm = np.linalg.norm(sA @ x_) ** 2
+
+                if metric == "A-norm":
+                    U, s, VT = svd(A)
+                    kappas = (1 / s[-1]) * s
+                    sA = U @ np.diag(np.sqrt(s)) @ VT
+                    ol_norm = np.linalg.norm(sA @ x_) ** 2
 
                 Sf_list = [SubsamplingSketchFactory((k, n)) for _ in range(num_runs)]
             
-                dists2_cd_block_acc = run_coordinate_descent(A, b, x_, x0, t_max, sA, sol_norm, k, Sf_list, metric="residual")
-                dists2_cd_reg = run_coordinate_descent_with_reg(A, b, x_, x0, t_max, sA, sol_norm, Sf_list, reg_values, metric="residual")
+                dists2_cd_block_acc = run_coordinate_descent(A, b, x_, x0, t_max, sA, sol_norm, k, Sf_list, metric=metric)
+                dists2_cd_reg = run_coordinate_descent_with_reg(A, b, x_, x0, t_max, sA, sol_norm, Sf_list, reg_values, metric=metric)
                 dists2_cd_reg_list.append(dists2_cd_reg)
                 dists2_cd_block_acc_list.append(dists2_cd_block_acc)
 

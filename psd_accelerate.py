@@ -2,7 +2,6 @@ import numpy as np
 import random
 from tqdm import tqdm
 from matplotlib import pyplot as plt
-from scipy.sparse.linalg import cg
 from sklearn.datasets import (
     fetch_california_housing,
     fetch_covtype,
@@ -139,10 +138,6 @@ def plot_results(
         k, dists2_cd_block_acc = dists2_cd_block_acc_list[i]
 
         ts = np.arange(t_max + 1)
-        # plt.semilogy(ts, dists2_cd, label="CD", color=color_cycle[0 % len(color_cycle)])
-        # plt.semilogy(ts, dists2_cd_block, label="CD+Memo", color=color_cycle[2 % len(color_cycle)])
-        # plt.semilogy(ts, dists2_cd_acc, label="CD+Accel", color=color_cycle[1 % len(color_cycle)], linestyle="--")
-        # plt.semilogy(ts, dists2_cd_block_acc, label="Full CD++", color=color_cycle[3 % len(color_cycle)], linestyle=":")
         plt.semilogy(ts, dists2_cd, label="CD", color="darkorange")
         plt.semilogy(ts, dists2_cd_block, label="CD+Memo", color="crimson")
         plt.semilogy(ts, dists2_cd_acc, label="CD+Accel", color="turquoise")   # , linestyle="--"
@@ -193,6 +188,8 @@ def main():
     num_runs = 10   # do multiple runs and take average
     effective_rank = 200   # 25, 50, 100, 200
     mu = 1e-3
+    mode = "write"   # or "read"
+    metric = "residual"   # or "A-norm"
     np.random.seed(0)
 
     for dataset_name in datasets:
@@ -229,56 +226,59 @@ def main():
                     b = A @ x_
                     x0 = np.zeros(n)
 
-                    sA = 0   # no need to compute for residual
-                    sol_norm = np.linalg.norm(b)   # uncomment below lines only if metric="A-norm"
-                    # U, s, VT = svd(A)
-                    # kappas = (1 / s[-1]) * s
-                    # sA = U @ np.diag(np.sqrt(s)) @ VT
-                    # sol_norm = np.linalg.norm(sA @ x_) ** 2
+                    sA = 0
+                    sol_norm = np.linalg.norm(b)
+
+                    if metric == "A-norm":
+                        U, s, VT = svd(A)
+                        kappas = (1 / s[-1]) * s
+                        sA = U @ np.diag(np.sqrt(s)) @ VT
+                        sol_norm = np.linalg.norm(sA @ x_) ** 2
 
                     Sf_list = [SubsamplingSketchFactory((k, n)) for _ in range(num_runs)]
-        
-                    dists2_cd, dists2_cd_acc, dists2_cd_block, dists2_cd_block_acc = run_coordinate_descent(A, b, x_, x0, t_max, sA, sol_norm, Sf_list, metric="residual")
-                    dists2_cd_list.append(dists2_cd)
-                    dists2_cd_acc_list.append(dists2_cd_acc)
-                    dists2_cd_block_list.append(dists2_cd_block)
-                    dists2_cd_block_acc_list.append((k, dists2_cd_block_acc))
+
+                    if mode == "write":
+                        dists2_cd, dists2_cd_acc, dists2_cd_block, dists2_cd_block_acc = run_coordinate_descent(A, b, x_, x0, t_max, sA, sol_norm, Sf_list, metric="residual")
+                        dists2_cd_list.append(dists2_cd)
+                        dists2_cd_acc_list.append(dists2_cd_acc)
+                        dists2_cd_block_list.append(dists2_cd_block)
+                        dists2_cd_block_acc_list.append((k, dists2_cd_block_acc))
 
                 ### Save the distance data
-
-                if dataset_name == "low_rank":
-                    with open(f'acc_{dataset_name}_{effective_rank}.npy', 'wb') as f:
-                        for i in range(4):
-                            np.save(f, dists2_cd_list[i])
-                            np.save(f, dists2_cd_acc_list[i])
-                            np.save(f, dists2_cd_block_list[i])
-                            np.save(f, dists2_cd_block_acc_list[i][1])
+                if mode == "write":
+                    if dataset_name == "low_rank":
+                        with open(f'acc_{dataset_name}_{effective_rank}.npy', 'wb') as f:
+                            for i in range(4):
+                                np.save(f, dists2_cd_list[i])
+                                np.save(f, dists2_cd_acc_list[i])
+                                np.save(f, dists2_cd_block_list[i])
+                                np.save(f, dists2_cd_block_acc_list[i][1])
                 
-                else:
-                    with open(f'acc_{dataset_name}_{kernel_type}_{gamma}.npy', 'wb') as f:
-                        for i in range(4):
-                            np.save(f, dists2_cd_list[i])
-                            np.save(f, dists2_cd_acc_list[i])
-                            np.save(f, dists2_cd_block_list[i])
-                            np.save(f, dists2_cd_block_acc_list[i][1])
-            
+                    else:
+                        with open(f'acc_{dataset_name}_{kernel_type}_{gamma}.npy', 'wb') as f:
+                            for i in range(4):
+                                np.save(f, dists2_cd_list[i])
+                                np.save(f, dists2_cd_acc_list[i])
+                                np.save(f, dists2_cd_block_list[i])
+                                np.save(f, dists2_cd_block_acc_list[i][1])
+                                
                 ### Open the distance data, uncomment for revision of plots
+                elif mode == "read":
+                    if dataset_name == "low_rank":
+                        with open(f'acc_{dataset_name}_{effective_rank}.npy', 'rb') as f:
+                            for i in range(4):
+                                dists2_cd_list.append(np.load(f))
+                                dists2_cd_acc_list.append(np.load(f))
+                                dists2_cd_block_list.append(np.load(f))
+                                dists2_cd_block_acc_list.append((k, np.load(f)))
 
-                # if dataset_name == "low_rank":
-                #     with open(f'acc_{dataset_name}_{effective_rank}.npy', 'rb') as f:
-                #         for i in range(4):
-                #             dists2_cd_list.append(np.load(f))
-                #             dists2_cd_acc_list.append(np.load(f))
-                #             dists2_cd_block_list.append(np.load(f))
-                #             dists2_cd_block_acc_list.append((k, np.load(f)))
-
-                # else:
-                #     with open(f'acc_{dataset_name}_{kernel_type}_{gamma}.npy', 'rb') as f:
-                #         for i in range(4):
-                #             dists2_cd_list.append(np.load(f))
-                #             dists2_cd_acc_list.append(np.load(f))
-                #             dists2_cd_block_list.append(np.load(f))
-                #             dists2_cd_block_acc_list.append((k, np.load(f)))
+                    else:
+                        with open(f'acc_{dataset_name}_{kernel_type}_{gamma}.npy', 'rb') as f:
+                            for i in range(4):
+                                dists2_cd_list.append(np.load(f))
+                                dists2_cd_acc_list.append(np.load(f))
+                                dists2_cd_block_list.append(np.load(f))
+                                dists2_cd_block_acc_list.append((k, np.load(f)))
 
 
                 ### Plot and save results
