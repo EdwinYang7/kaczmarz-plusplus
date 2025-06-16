@@ -5,7 +5,7 @@ from scipy.linalg import svd
 import pyamg   # for implementation of GMRES
 
 from sketch import SubsamplingSketchFactory
-from utils import symFHT
+from utils import hadamard, symFHT, sketch_or_subsample
 from kaczmarz import coordinate_descent_meta
 from psd_accelerate import load_dataset, compute_kernel, setup_system
 
@@ -58,34 +58,52 @@ def run_gmres(A, b, x, x0, pass_max, sA, sol_norm, metric="residual", accuracy=1
     return dists2_gmres, flops_gmres
 
 
-def run_coordinate_descent(A, b, x, x0, t_max, sA, sol_norm, Sf_list, metric="residual", accuracy=1):
+def run_coordinate_descent(A, b, x, x0, t_max, sA, sol_norm, Sf_list, metric="residual", RHT=True, accuracy=1):
     """Run CD++ with/without block memoization and compute FLOPs."""
     num_runs = len(Sf_list)
     dists2_cd_acc_runs = []
-    dists2_block_acc_runs = []
+    dists2_cdpp_runs = []
 
     for run_idx in range(num_runs):
         Sf = Sf_list[run_idx]
         
-        X_cd_acc, flops_cd_acc = coordinate_descent_meta(A, b, x0, Sf, t_max, block=False, reg=1e-8)
-        X_block_acc, flops_block_acc = coordinate_descent_meta(A, b, x0, Sf, t_max, reg=1e-8)
+        if RHT:
+            X_cd_acc, flops_cd_acc = coordinate_descent_meta(A, b, x0, Sf, t_max, block=False, reg=1e-8)
+        X_cdpp, flops_cdpp = coordinate_descent_meta(A, b, x0, Sf, t_max, reg=1e-8)
 
         if metric == "A-norm":
-            dists2_cd_acc = (1/sol_norm) * np.linalg.norm((X_cd_acc - x[None, :]) @ sA, axis=1) ** 2
-            dists2_block_acc = (1/sol_norm) * np.linalg.norm((X_block_acc - x[None, :]) @ sA, axis=1) ** 2
+            if RHT:
+                dists2_cd_acc = (1/sol_norm) * np.linalg.norm((X_cd_acc - x[None, :]) @ sA, axis=1) ** 2
+            dists2_cdpp = (1/sol_norm) * np.linalg.norm((X_cdpp - x[None, :]) @ sA, axis=1) ** 2
 
         elif metric == "residual":
-            dists2_cd_acc = (1/sol_norm) * np.linalg.norm(X_cd_acc @ A - b[None, :], axis=1)
-            dists2_block_acc = (1/sol_norm) * np.linalg.norm(X_block_acc @ A - b[None, :], axis=1)
+            if RHT:
+                dists2_cd_acc = (1/sol_norm) * np.linalg.norm(X_cd_acc @ A - b[None, :], axis=1)
+            dists2_cdpp = (1/sol_norm) * np.linalg.norm(X_cdpp @ A - b[None, :], axis=1)
         
-        dists2_cd_acc_runs.append(dists2_cd_acc)
-        dists2_block_acc_runs.append(dists2_block_acc)
+        if RHT: 
+            dists2_cd_acc_runs.append(dists2_cd_acc)
+        dists2_cdpp_runs.append(dists2_cdpp)
 
     ### Average over runs
-    dists2_cd_acc_avg = np.mean(dists2_cd_acc_runs, axis=0)
-    dists2_block_acc_avg = np.mean(dists2_block_acc_runs, axis=0)
+    if RHT:
+        dists2_cd_acc_avg = np.mean(dists2_cd_acc_runs, axis=0)
+    dists2_cdpp_avg = np.mean(dists2_cdpp_runs, axis=0)
 
-    return dists2_cd_acc_avg, dists2_block_acc_avg, flops_cd_acc, flops_block_acc
+    if RHT:
+        return (
+            dists2_cd_acc_avg,
+            dists2_cdpp_avg,
+            flops_cd_acc,
+            flops_cdpp,
+        )
+    else:
+        return (
+            None,
+            dists2_cdpp_avg,
+            None,
+            flops_cdpp,
+        )
 
 
 def find_iters(dists2, flops, accuracy):
@@ -99,45 +117,43 @@ def find_iters(dists2, flops, accuracy):
 
 
 def plot_results(
-    # passes,
     cg_list,
     gmres_list,
     cd_acc_list,
-    block_acc_list,
+    cdpp_list,
+    # cdpp_lev_list,
+    cdpp_us_list,
     name_list,
     # kappas,
-    n,
-    k,
     filename,
     dataset_name,
     kernel_type,
     gamma,
-    mu,
-    num_runs,
     effective_rank_list = [25, 50, 100, 200]
 ):
     """Plot and save the results."""
-    color_cycle = plt.rcParams["axes.prop_cycle"].by_key()["color"]
-    plt.figure(figsize=(20, 5))
+    plt.figure(figsize=(10, 10))
 
     ### Plot convergence vs FLOPs
 
     for i in range (4):
-        plt.subplot(1, 4, i+1)
+        plt.subplot(2, 2, i+1)
         dists2_cg, flops_cg = cg_list[i]
         dists2_gmres, flops_gmres = gmres_list[i]
         dists2_cd_acc, flops_cd_acc = cd_acc_list[i]
-        dists2_block_acc, flops_block_acc = block_acc_list[i]
+        dists2_cdpp, flops_cdpp = cdpp_list[i]
+        # dists2_cdpp_lev, flops_cdpp_lev = cdpp_lev_list[i]
+        dists2_cdpp_us, flops_cdpp_us = cdpp_us_list[i]
         
         kernel_type, gamma = name_list[i]
-        # plt.semilogy(flops_cg, dists2_cg, label="CG", color=color_cycle[0])
-        # plt.semilogy(flops_gmres, dists2_gmres, label='GMRES', color=color_cycle[5], linestyle=":")
-        # plt.semilogy(flops_cd_acc, dists2_cd_acc, label="CD+Accel", color=color_cycle[1])
-        # plt.semilogy(flops_block_acc, dists2_block_acc, label="Full CD++", color=color_cycle[2], linestyle=":")
         plt.semilogy(flops_cg, dists2_cg, label="CG", color="darkorange", linewidth=2.5)
         plt.semilogy(flops_gmres, dists2_gmres, label='GMRES', color="crimson", linewidth=2.5)
-        plt.semilogy(flops_cd_acc, dists2_cd_acc, label="CD+Accel", color="turquoise", linewidth=2.5)
-        plt.semilogy(flops_block_acc, dists2_block_acc, label="Full CD++", color="royalblue", linewidth=2.5)
+        # plt.semilogy(flops_cd_acc, dists2_cd_acc, label="CD++ w/o Memo", color="turquoise", linewidth=2.5)
+        # plt.semilogy(flops_cdpp_lev, dists2_cdpp_lev, label="CD++ (LS)", color="darkcyan", linewidth=2.5)
+        # plt.semilogy(flops_cdpp_us, dists2_cdpp_us, label="CD++ w/o RHT", color="darkcyan", linewidth=2.5)
+        plt.semilogy(flops_cdpp, dists2_cdpp, label="CD++", color="royalblue", linewidth=2.5)
+
+
         plt.xlabel("FLOPs", fontsize=15)
         plt.ylabel("Residual $\|A x_t - b\| / \|b\|$", fontsize=15)
         if dataset_name  == "low_rank":
@@ -175,7 +191,7 @@ def plot_results(
     # # plt.semilogy(passes, dists2_cd, label="CD", color=color_cycle[0])
     # # plt.semilogy(passes, dists2_cd_heuristic_A, label="CD++ (A norm)", color=color_cycle[1], linestyle="--")
     # plt.semilogy(passes, dists2_cd_acc, label="CD++", color=color_cycle[1])
-    # plt.semilogy(passes, dists2_cd_block_acc, label="BCD++", color=color_cycle[2])
+    # plt.semilogy(passes, dists2_cd_cdpp, label="BCD++", color=color_cycle[2])
     # plt.xlabel("Passes over the input matrix")
     # plt.ylabel("Squared distance to solution")
     # plt.title("Convergence of different methods")
@@ -194,30 +210,29 @@ def plot_results(
 
     ### Overall title
 
-    # plt.suptitle(
-    #     f"Dataset: {dataset_name}",
-    #     # f"Dataset: {dataset_name}, n: {n}, k: {k}, mu: {mu}, runtimes: {num_runs}",
-    #     fontsize=20,
-    # )
+    plt.suptitle(
+        f"Dataset: {dataset_name}",
+        fontsize=20,
+    )
 
     plt.savefig(filename)
     plt.close()
 
 
 def main():
-    datasets = ["abalone", "phoneme", "california_housing", "covtype", "low_rank"]
+    datasets = ["abalone", "phoneme", "california_housing", "covtype"] # "low_rank"
     kernel_types = ["gaussian", "laplacian"]
     d = 4096
     m = d
     n = d
     mu = 1e-3
-    num_runs = 5
+    num_runs = 10
     k = 200
     pass_max = 200
     t_max = int(pass_max * m / k)
     t_max_cd = int(5 * pass_max * m / k)
     accuracy = 1e-8
-    mode = "write"   # or "read"
+    mode = "read"   # or "read"
     metric = "residual"   # or "A-norm"
     np.random.seed(0)
 
@@ -225,18 +240,23 @@ def main():
         cg_list = []
         gmres_list = []
         cd_acc_list = []
-        block_acc_list = []
+        cdpp_list = []
+        # cdpp_lev_list = []
+        cdpp_us_list = []
         name_list = []
         effective_rank_list = [25, 50, 100, 200]
 
         if mode == "read":   # Open the distance data
             with open(f'FLOPs_{dataset_name}.npy', 'rb') as f:
-                for i in range(4):
+                for _ in range(4):
                     cg_list.append(np.load(f))
                     gmres_list.append(np.load(f))
                     cd_acc_list.append(np.load(f))
-                    block_acc_list.append(np.load(f))
+                    cdpp_list.append(np.load(f))
+                    # cdpp_is_list.append(np.load(f))
+                    cdpp_us_list.append(np.load(f))
                     
+        idx = 0
 
         for kernel_type in kernel_types:
             for gamma in [1e-1, 1e-2]:
@@ -250,13 +270,22 @@ def main():
                     X_normalized, b = load_dataset(dataset_name, d)
                     A0 = compute_kernel(X_normalized, kernel_type, gamma=gamma)
                     A = setup_system(A0, mu)
+                
+                ### Compute exact leverage scores
+                # U, _, _ = svd(A, full_matrices=False, check_finite=False)
+                # lev = np.sum(U**2, axis=1)
+                # p_lev = lev / lev.sum()
 
                 ### RHT: diagonal step
+                flops_pre = 0
                 n = A.shape[0]
                 random_signs = np.random.choice([-1, 1], size=n)
                 D = np.diag(random_signs)
+                A_ = A
                 A = D @ A @ D
-                flops_pre = n**2 / 2 - n / 2
+                flops_pre += n**2 / 2 - n / 2
+                
+                Q = (1 / np.sqrt(n)) * hadamard(n) @ D
 
                 ### RHT: Hadamard transform step
                 A, flops_rht = symFHT(A)
@@ -264,6 +293,9 @@ def main():
                 x_ = np.random.randn(n)
                 b = A @ x_
                 x0 = np.zeros(n)
+
+                b_ = np.linalg.inv(Q) @ b
+                x0_ = Q.T @ x0
 
                 sA = 0
                 sol_norm = np.linalg.norm(b)
@@ -275,32 +307,46 @@ def main():
                     sol_norm = np.linalg.norm(sA @ x_) ** 2
 
                 Sf_list = [SubsamplingSketchFactory((k, n)) for _ in range(num_runs)]
+                # Sf_list_lev = [SubsamplingSketchFactory((k, n), probabilities=p_lev) for _ in range(num_runs)]
+                # Sf_list_is = [sketch_or_subsample(A_, k, 'diag_avg', lam=0.2) for _ in range(num_runs)]
+
 
                 if mode == "write":
                     dists2_cg, flops_cg = run_cg(A, b, x_, x0, t_max, sA, sol_norm, accuracy=accuracy)
                     dists2_gmres, flops_gmres = run_gmres(A, b, x_, x0, t_max, sA, sol_norm, accuracy=accuracy)
-                    dists2_cd_acc, dists2_block_acc, flops_cd_acc, flops_block_acc = run_coordinate_descent(A, b, x_, x0, t_max_cd, sA, sol_norm, Sf_list, accuracy=accuracy)
+                    dists2_cd_acc, dists2_cdpp, flops_cd_acc, flops_cdpp = run_coordinate_descent(A, b, x_, x0, t_max_cd, sA, sol_norm, Sf_list, accuracy=accuracy)
+                    # _, dists2_cdpp_lev, _, flops_cdpp_lev = run_coordinate_descent(A_, b_, x_, x0_, t_max_cd, sA, sol_norm, Sf_list_lev, RHT=False, accuracy=accuracy)
+                    _, dists2_cdpp_us, _, flops_cdpp_us = run_coordinate_descent(A_, b_, x_, x0_, t_max_cd, sA, sol_norm, Sf_list, RHT=False, accuracy=accuracy)
 
                     flops_cd_acc += flops_pre
-                    flops_block_acc += flops_pre
+                    flops_cdpp += flops_pre
 
                     cg_list.append((dists2_cg, flops_cg))
                     gmres_list.append((dists2_gmres, flops_gmres))
                     cd_acc_list.append((dists2_cd_acc, flops_cd_acc))
-                    block_acc_list.append((dists2_block_acc, flops_block_acc))
+                    cdpp_list.append((dists2_cdpp, flops_cdpp))
+                    # cdpp_lev_list.append((dists2_cdpp_lev, flops_cdpp_lev))
+                    cdpp_us_list.append((dists2_cdpp_us, flops_cdpp_us))
 
                 elif mode == "read":
-                    dists2_cg, flops_cg = cg_list.pop(0)
-                    dists2_gmres, flops_gmres = gmres_list.pop(0)
-                    dists2_cd_acc, flops_cd_acc = cd_acc_list.pop(0)
-                    dists2_block_acc, flops_block_acc = block_acc_list.pop(0)
+                    dists2_cg, flops_cg = cg_list[idx]
+                    dists2_gmres, flops_gmres = gmres_list[idx]
+                    dists2_cd_acc, flops_cd_acc = cd_acc_list[idx]
+                    dists2_cdpp, flops_cdpp = cdpp_list[idx] 
+                    # dists2_cdpp_lev, flops_cdpp_lev = cdpp_lev_list.pop(0)
+                    dists2_cdpp_us, flops_cdpp_us = cdpp_us_list[idx]
 
+                    idx += 1
+                
+                ### Used in counting FLOPs for given accuracy
                 idx_cg, flops_cg_idx = find_iters(dists2_cg, flops_cg, accuracy)
                 idx_gmres, flops_gmres_idx = find_iters(dists2_gmres, flops_gmres, accuracy)
                 idx_cd_acc, flops_cd_acc_idx = find_iters(dists2_cd_acc, flops_cd_acc, accuracy)
-                idx_block_acc, flops_block_acc_idx = find_iters(dists2_block_acc, flops_block_acc, accuracy)
+                idx_cdpp, flops_cdpp_idx = find_iters(dists2_cdpp, flops_cdpp, accuracy)
+                # idx_cdpp_lev, flops_cdpp_lev_idx = find_iters(dists2_cdpp_lev, flops_cdpp_lev, accuracy)
+                idx_cdpp_us, flops_cdpp_us_idx = find_iters(dists2_cdpp_us, flops_cdpp_us, accuracy)
 
-                print(f"Dataset: {dataset_name}, kernel: {kernel_type}, width: {gamma}, accuracy: {accuracy}, FLOPs for CG: {flops_cg_idx}, FLOPs for GMRES: {flops_gmres_idx}, FLOPs for CD+Accel: {flops_cd_acc_idx}, FLOPs for CD++: {flops_block_acc_idx}")
+                print(f"Dataset: {dataset_name}, kernel: {kernel_type}, width: {gamma}, accuracy: {accuracy}, FLOPs for CG: {flops_cg_idx}, FLOPs for GMRES: {flops_gmres_idx}, FLOPs for CD++ (no memo): {flops_cd_acc_idx}, FLOPs for CD++ (no RHT): {flops_cdpp_us_idx}, FLOPs for CD++: {flops_cdpp_idx}")
 
         if mode == "write":   #  Save the distance data
             with open(f'FLOPs_{dataset_name}.npy', 'wb') as f:
@@ -308,7 +354,9 @@ def main():
                     np.save(f, cg_list[i])
                     np.save(f, gmres_list[i])
                     np.save(f, cd_acc_list[i])
-                    np.save(f, block_acc_list[i])
+                    np.save(f, cdpp_list[i])
+                    # np.save(f, cdpp_lev_list[i])
+                    np.save(f, cdpp_us_list[i])
 
 
         ### Plot and save results
@@ -317,17 +365,15 @@ def main():
             cg_list,
             gmres_list,
             cd_acc_list,
-            block_acc_list,
+            cdpp_list,
+            # cdpp_lev_list,
+            cdpp_us_list,
             name_list,
             # kappas,
-            n,
-            k,
             filename,
             dataset_name,
             kernel_type,
-            gamma,
-            mu,
-            num_runs,
+            gamma
         )
 
 if __name__ == "__main__":
