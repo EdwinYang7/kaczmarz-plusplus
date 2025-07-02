@@ -220,7 +220,7 @@ def plot_results(
 
 
 def main():
-    datasets = ["abalone", "phoneme", "california_housing", "covtype"] # "low_rank"
+    datasets = ["abalone", "phoneme", "california_housing", "covtype"]   # "low_rank"
     kernel_types = ["gaussian", "laplacian"]
     d = 4096
     m = d

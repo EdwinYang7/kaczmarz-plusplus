@@ -4,10 +4,7 @@ from tqdm import tqdm
 import matplotlib as mpl
 from matplotlib import pyplot as plt
 from sklearn.datasets import make_low_rank_matrix
-
 from scipy.linalg import svd, sqrtm, cholesky, solve_triangular
-from sklearn.metrics.pairwise import rbf_kernel, laplacian_kernel
-from sklearn.preprocessing import StandardScaler
 
 from sketch import SubsamplingSketchFactory
 from utils import fht
@@ -76,15 +73,11 @@ def plot_results(
     effective_rank
 ):
     """Plot and save the results."""
-    # color_cycle = plt.rcParams["axes.prop_cycle"].by_key()["color"]
-    # cmap = plt.cm.get_cmap("autumn_r")
     colors = ["gold", "darkorange", "orangered"]
     plt.figure(figsize=(len(k_list) * 5, 5))
-    cmap_custom = mpl.colors.LinearSegmentedColormap.from_list(
-    "darkYel_orange_red", colors)
+    cmap_custom = mpl.colors.LinearSegmentedColormap.from_list("darkYel_orange_red", colors)
 
     ### Plot convergence vs iterations
-
     marker_list = ["o", "s", "^", "D", "v", "x", "+"]
     for i in range(len(k_list)):
         plt.subplot(1, len(k_list), i+1)
@@ -134,7 +127,7 @@ def main():
     metric = "residual"
     np.random.seed(0)
 
-    effective_rank_list = [50, 100]
+    effective_rank_list = [50, 100]  # [25, 50, 100, 200]
     k_list = [100, 200]
     maxiter_list = [2, 4, 8]
 

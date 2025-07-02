@@ -15,7 +15,7 @@ from sklearn.preprocessing import StandardScaler
 
 from sketch import SubsamplingSketchFactory   # Sketch, SketchFactory, GaussianSketchFactory
 from utils import symFHT
-from kaczmarz import coordinate_descent_meta   # coordinate_descent, coordinate_descent_tuned_l2, coordinate_descent_block
+from kaczmarz import coordinate_descent_meta
 
 
 def load_dataset(name, d, effective_rank=100):
@@ -79,7 +79,7 @@ def run_coordinate_descent(A, b, x, x0, t_max, sA, sol_norm, Sf_list, metric="re
         X_block, flops_block = coordinate_descent_meta(A, b, x0, Sf, t_max, accelerated=False, reg=1e-8)
         X_block_acc, flops_block_acc = coordinate_descent_meta(A, b, x0, Sf, t_max, reg=1e-8)
 
-        if metric == "A-norm":
+        if metric == "A-norm": 
             dists2_cd = (1/sol_norm) * np.linalg.norm((X_cd - x[None, :]) @ sA, axis=1) ** 2
             dists2_cd_acc = (1/sol_norm) * np.linalg.norm((X_cd_acc - x[None, :]) @ sA, axis=1) ** 2
             dists2_cd_block = (1/sol_norm) * np.linalg.norm((X_block - x[None, :]) @ sA, axis=1) ** 2
@@ -105,6 +105,41 @@ def run_coordinate_descent(A, b, x, x0, t_max, sA, sol_norm, Sf_list, metric="re
     return dists2_cd_avg, dists2_cd_acc_avg, dists2_cd_block_avg, dists2_cd_block_acc_avg
 
 
+def plot_cdpp_block_sizes(
+    t_max_list,
+    dists2_cd_block_acc_list,
+    k_list,
+    filename,
+    dataset_name,
+    kernel_type=None,
+    gamma=None,
+    effective_rank=None,
+):
+    """Testing CD++ for different block sizes."""
+    plt.figure(figsize=(10, 6))
+
+    for i, k in enumerate(k_list):
+        t_max = t_max_list[i]
+        ts = np.arange(t_max + 1)
+        _, dists2 = dists2_cd_block_acc_list[i]
+        plt.semilogy(ts, dists2, label=f"block size = {k}", linewidth=2.5)
+
+    plt.xlabel("Iterations", fontsize=14)
+    plt.ylabel("Residual $\|A x_t - b\| / \|b\|$", fontsize=14)
+    plt.ylim(1e-7, 1e0)
+    plt.legend(title="CD++ settings", fontsize=12)
+    plt.grid(True, which="both", ls="--", alpha=0.5)
+
+    if dataset_name == "low_rank":
+        plt.title(f"CD++ on low-rank (eff. rank={effective_rank})", fontsize=16)
+    else:
+        plt.title(f"CD++ on {dataset_name}, kernel={kernel_type}, γ={gamma}", fontsize=16)
+
+    plt.tight_layout()
+    plt.savefig(filename)
+    plt.close()
+
+
 def plot_results(
     t_max_list,
     dists2_cd_list,
@@ -112,15 +147,12 @@ def plot_results(
     dists2_cd_block_list,
     dists2_cd_block_acc_list,
     # kappas,
-    n,
     k_list,
     filename,
     dataset_name,
     kernel_type,
     gamma,
     # sketch_method,
-    mu,
-    num_runs,
     effective_rank
 ):
     """Plot and save the results."""
@@ -180,7 +212,7 @@ def plot_results(
 
 
 def main():
-    datasets = ["abalone", "phoneme", "california_housing", "covtype"]   # "low_rank"
+    datasets = ["abalone"]   # "low_rank"
     kernel_types = ["gaussian", "laplacian"]
     d = 4096
     m = d
@@ -188,7 +220,7 @@ def main():
     num_runs = 10   # do multiple runs and take average
     effective_rank = 200   # 25, 50, 100, 200
     mu = 1e-3
-    mode = "write"   # or "read"
+    mode = "read"   # or "write"
     metric = "residual"   # or "A-norm"
     np.random.seed(0)
 
@@ -286,24 +318,32 @@ def main():
                     filename = f"acc_{dataset_name}_{effective_rank}.png"
                 else:
                     filename = f"acc_{dataset_name}_{kernel_type}_{gamma}.png"
-                plot_results(
-                    t_max_list,
-                    dists2_cd_list,
-                    dists2_cd_acc_list,
-                    dists2_cd_block_list,
-                    dists2_cd_block_acc_list,
-                    # kappas,
-                    n,
-                    k_list,
-                    filename,
-                    dataset_name,
-                    kernel_type,
-                    gamma,
-                    # sketch_method,
-                    mu,
-                    num_runs,
-                    effective_rank
-                )
+                # plot_results(
+                #     t_max_list,
+                #     dists2_cd_list,
+                #     dists2_cd_acc_list,
+                #     dists2_cd_block_list,
+                #     dists2_cd_block_acc_list,
+                #     # kappas,
+                #     k_list,
+                #     filename,
+                #     dataset_name,
+                #     kernel_type,
+                #     gamma,
+                #     # sketch_method,
+                #     effective_rank
+                # )
+
+                plot_cdpp_block_sizes(
+    t_max_list,
+    dists2_cd_block_acc_list,
+    k_list,
+    filename,
+    dataset_name,
+    kernel_type=kernel_type,
+    gamma=gamma,
+    effective_rank=effective_rank,
+)
 
 if __name__ == "__main__":
     main()

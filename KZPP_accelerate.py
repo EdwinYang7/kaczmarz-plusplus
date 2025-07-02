@@ -3,10 +3,7 @@ import random
 from tqdm import tqdm
 from matplotlib import pyplot as plt
 from sklearn.datasets import (make_low_rank_matrix)
-
 from scipy.linalg import svd, sqrtm, cholesky, solve_triangular
-from sklearn.metrics.pairwise import rbf_kernel, laplacian_kernel
-from sklearn.preprocessing import StandardScaler
 
 from sketch import SubsamplingSketchFactory   # Sketch, SketchFactory, GaussianSketchFactory
 from utils import fht
@@ -87,7 +84,7 @@ def plot_results(
         ts = np.arange(t_max + 1)
         plt.semilogy(ts, dists2_kz, label="Kaczmarz", color="darkorange")
         plt.semilogy(ts, dists2_kz_block, label="K++ w/o Accel", color="crimson")
-        plt.semilogy(ts, dists2_kz_acc, label="K++ w/o Memo", color="turquoise")   # , linestyle="--"
+        plt.semilogy(ts, dists2_kz_acc, label="K++ w/o Memo", color="turquoise")
         plt.semilogy(ts, dists2_kzpp, label="Full K++", color="royalblue")
         plt.xlabel("Iterations", fontsize=15)
         plt.ylabel("Residual $\|A x_t - b\| / \|b\|$", fontsize=15)
@@ -114,8 +111,8 @@ def main():
     metric = "residual"
     np.random.seed(0)
 
-    effective_rank_list = [50, 100]
-    k_list = [100, 200]   # [50, 100, 150, 200]
+    effective_rank_list = [25, 200]   # [25, 50, 100, 200]
+    k_list = [100, 200]
 
     for effective_rank in effective_rank_list:
         t_max_list = []

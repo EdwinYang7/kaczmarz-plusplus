@@ -32,29 +32,6 @@ def rht(n):
     Q = Q_N[:n, :n]   # Extract the first n rows and n columns to get Q of size n x n
     
     return Q
-
-
-# def fht(indices, A):
-#     """
-#     Fast Hadamard Transform with FLOPs counting.
-#     Assume that n is power of 2.
-#     """
-#     flops = 0
-#     n = A.shape[0]
-#     if n == 1:
-#         return A, flops
-#     i1 = indices[indices < n // 2]
-#     i2 = indices[indices >= n // 2]
-#     if len(i1) == 0:
-#         return fht(i2 - n//2, A[:n//2, :] - A[n//2:, :]), flops
-#     elif len(i2) == 0:
-#         return fht(i1, A[:n//2, :] + A[n//2:, :]), flops
-#     else:
-#         A1, flops1 = fht(i1, A[:n//2, :] + A[n//2:, :])
-#         A2, flops2 = fht(i2 - n // 2, A[:n//2, :] - A[n//2:, :])
-#         flops += flops1 + flops2 + n
-#         A = np.concatenate([A1, A2], axis=0)
-#         return A, flops
     
 
 def fht(A):
