@@ -3,11 +3,63 @@ from matplotlib import pyplot as plt
 from scipy.sparse.linalg import cg
 from scipy.linalg import svd
 import pyamg   # for implementation of GMRES
+from sklearn.datasets import (
+    fetch_california_housing,
+    fetch_covtype,
+    fetch_openml,
+    make_low_rank_matrix
+)
 
+from sklearn.metrics.pairwise import rbf_kernel, laplacian_kernel
+from sklearn.preprocessing import StandardScaler
 from sketch import SubsamplingSketchFactory
 from utils import hadamard, symFHT, sketch_or_subsample
 from kaczmarz import coordinate_descent_meta
-from psd_accelerate import load_dataset, compute_kernel, setup_system
+
+
+def load_dataset(name, d, effective_rank=100):
+    """Load and preprocess the dataset."""
+    if name == "california_housing":
+        data = fetch_california_housing()
+    elif name == "covtype":
+        data = fetch_covtype()
+    elif name == "abalone":
+        data = fetch_openml(data_id=720, as_frame=False, parser="liac-arff")
+    elif name == "phoneme":
+        data = fetch_openml(data_id=1489, as_frame=False)
+
+    if name == "low_rank":   # Synthetic low rank dataset
+        X = make_low_rank_matrix(n_samples=d, n_features=d, effective_rank=effective_rank,tail_strength=0.01)
+        A = X @ X.T + 1e-3 * np.eye(d)
+        return A
+    
+    else:   # Benchmark dataset
+        X, y = data.data, data.target
+        X = X[:d, :]
+        b = y[:d]
+        # b = b / np.linalg.norm(b)
+        scaler = StandardScaler()
+        X_normalized = scaler.fit_transform(X)
+        return X_normalized, b
+
+
+def compute_kernel(X, kernel_type, **kwargs):
+    """Construct kernel matrix for benchmark dataset."""
+    if kernel_type == "gaussian":
+        gamma = kwargs.get("gamma", 1e-1)
+        A0 = rbf_kernel(X, gamma=gamma)
+    elif kernel_type == "laplacian":
+        gamma = kwargs.get("gamma", 1e-1)
+        A0 = laplacian_kernel(X, gamma=gamma)
+    return A0
+
+
+def setup_system(A0, mu):
+    """Set up regularized linear system for benchmark dataset."""
+    n = A0.shape[0]
+    A1 = mu * np.eye(n)
+    A = A0 + A1
+    return A
 
 
 def run_cg(A, b, x, x0, pass_max, sA, sol_norm, metric="residual", accuracy=1):

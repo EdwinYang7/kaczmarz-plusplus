@@ -23,14 +23,6 @@ def bernoulli_frac(t, nu):
     return True if random.random() < p else False
 
 
-def get_accelerated_params(mu: float, nu: float) -> Tuple[float, float, float]:
-    beta = 1 - np.sqrt(mu / nu)
-    gamma = np.sqrt(1 / (mu * nu))
-    alpha = 1 / (1 + gamma * nu)
-
-    return beta, gamma, alpha
-
-
 def inner_precondition(
     A_S: np.ndarray,
     tau: int,
@@ -80,7 +72,7 @@ def kaczmarz_plusplus(
     x0: np.ndarray,
     Sf: SketchFactory,
     t_max: int,
-    accelerated=False,
+    accelerated=True,
     block=True,
     exact=False,
     reg=1e-6,

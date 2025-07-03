@@ -6,7 +6,7 @@ from scipy.linalg import svd
 from sketch import SubsamplingSketchFactory
 from utils import symFHT
 from kaczmarz import coordinate_descent_meta
-from psd_accelerate import load_dataset, compute_kernel, setup_system
+from psd_flops import load_dataset, compute_kernel, setup_system
 
 
 def run_coordinate_descent(A, b, x, x0, t_max, sA, sol_norm, k, Sf_list, metric="residual"):
