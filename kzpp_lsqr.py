@@ -18,7 +18,7 @@ def load_dataset(m, n, effective_rank=100):
 
 
 def run_kaczmarz_maxiter(A, b, x, x0, t_max, sol_norm, Sf_list, maxiter_list, metric="residual"):
-    """Run kaczmarz++ with inexact inner solver."""
+    """Run Kaczmarz++ with inexact inner solver."""
     num_runs = len(Sf_list)
     dists2_kzpp_iter = []
 
@@ -42,13 +42,12 @@ def run_kaczmarz_maxiter(A, b, x, x0, t_max, sol_norm, Sf_list, maxiter_list, me
 
 
 def run_kaczmarz(A, b, x, x0, t_max, sol_norm, Sf_list, metric="residual"):
-    """Run kaczmarz++ with exact inner solver."""
+    """Run Kaczmarz++ with exact inner solver."""
     num_runs = len(Sf_list)
     dists2_kz_runs = []
 
     for run_idx in range(num_runs):
         Sf = Sf_list[run_idx]
-
         X_kz = kaczmarz_plusplus(A, b, x0, Sf, t_max, accelerated=True, block=True, exact=True, reg=1e-8)
 
         if metric == "l2-norm":

@@ -23,24 +23,6 @@ def bernoulli_frac(t, nu):
     return True if random.random() < p else False
 
 
-def calculate_lamda_mu_nu(A: np.ndarray, k: int) -> Tuple[float, float, float]:
-
-    s2 = np.linalg.eigvalsh(A)  # (A.T @ A)
-    s2[s2 < np.mean(s2) * 1e-8] = 0
-    def f(lamda):
-        return np.sum(s2 / (s2 + lamda)) - k
-
-    lamda = root_scalar(f, bracket=[1e-8, np.max(s2) * len(s2) * 1e8]).root
-    s2_min = np.min(s2[s2 > 0])
-    mu = s2_min / (s2_min + lamda)
-    num = np.sum((s2 > 0) / (s2 + lamda))
-    denom = np.sum(s2 / (s2 + lamda) ** 2)
-    lamda_prime = lamda * num / denom
-    nu = 1 + lamda_prime / (s2_min + lamda)
-
-    return lamda, mu, nu
-
-
 def get_accelerated_params(mu: float, nu: float) -> Tuple[float, float, float]:
     beta = 1 - np.sqrt(mu / nu)
     gamma = np.sqrt(1 / (mu * nu))
@@ -279,49 +261,3 @@ def coordinate_descent_meta(
         flops_cd.append(flops)
 
     return X, np.array(flops_cd)
-
-
-def coordinate_descent(
-    A: np.ndarray,
-    b: np.ndarray,
-    x0: np.ndarray,
-    Sf: SketchFactory,
-    t_max: int,
-    accelerated=False,
-    beta=None,
-    gamma=None,
-    alpha=None,
-    rng=None,
-):
-    m, n = A.shape
-    k = Sf.shape[0]
-
-    if rng is None:
-        rng = np.random.default_rng()
-
-    if accelerated:
-        if None in [beta, gamma, alpha]:
-            lamda, mu, nu = calculate_lamda_mu_nu(A, k)
-            beta, gamma, alpha = get_accelerated_params(mu, nu)
-    else:
-        beta = 1.0
-        gamma = 1.0
-        alpha = 0.0
-
-    X = np.zeros((1 + t_max, n))
-    x = X[0, :] = x0.copy()
-    v = x
-
-    for t in tqdm(range(1, t_max + 1)):
-        y = alpha * v + (1 - alpha) * x
-        S = Sf()
-        SA = S @ A
-        SAS = S @ SA.T
-        b_ = SA @ y - S @ b
-        u = np.linalg.solve(SAS, b_)
-        w = S.T @ u
-        x = y - w
-        v = beta * v + (1 - beta) * y - gamma * w
-        X[t, :] = x.copy()
-
-    return X

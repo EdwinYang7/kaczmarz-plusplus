@@ -15,8 +15,9 @@ def load_dataset(m, n, effective_rank=100):
     X = make_low_rank_matrix(n_samples=m, n_features=n, effective_rank=effective_rank,tail_strength=0.01)
     return X
 
-def run_coordinate_descent(A, b, x, x0, t_max, sol_norm, Sf_list, maxiter=8, metric="residual"):
-    """Run CD++ with/without acceleration, with/without block memoization."""
+
+def run_kaczmarz_variants(A, b, x, x0, t_max, sol_norm, Sf_list, maxiter=8, metric="residual"):
+    """Run Kaczmarz++ with/without acceleration, with/without block memoization."""
     num_runs = len(Sf_list)   # Number of multiple runs
     dists2_kz_runs = []
     dists2_kz_acc_runs = []
@@ -90,7 +91,6 @@ def plot_results(
         plt.ylabel("Residual $\|A x_t - b\| / \|b\|$", fontsize=15)
         # plt.ylabel("Squared distance to solution $\|x_t - x\|_A^2 / \|x\|_A^2$")
         plt.title(f"block size={k_list[i]}", fontsize=15)
-        # plt.ylim(1e-7, 1e0)
         plt.legend(fontsize="16", loc="upper right")
 
     plt.tight_layout(rect=[0, 0, 1, 0.95])
@@ -146,7 +146,7 @@ def main():
             Sf_list = [SubsamplingSketchFactory((k, m)) for _ in range(num_runs)]
 
             if mode == "write":
-                dists2_kz, dists2_kz_acc, dists2_kz_block, dists2_kzpp = run_coordinate_descent(A, b, x_, x0, t_max, sol_norm, Sf_list, maxiter, metric=metric)
+                dists2_kz, dists2_kz_acc, dists2_kz_block, dists2_kzpp = run_kaczmarz_variants(A, b, x_, x0, t_max, sol_norm, Sf_list, maxiter, metric=metric)
                 dists2_kz_list.append(dists2_kz)
                 dists2_kz_acc_list.append(dists2_kz_acc)
                 dists2_kz_block_list.append(dists2_kz_block)
