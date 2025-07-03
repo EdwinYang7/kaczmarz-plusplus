@@ -2,7 +2,7 @@ import numpy as np
 import random
 from tqdm import tqdm
 from matplotlib import pyplot as plt
-from sklearn.datasets import (make_low_rank_matrix)
+from sklearn.datasets import make_low_rank_matrix
 from scipy.linalg import svd, sqrtm, cholesky, solve_triangular
 
 from sketch import SubsamplingSketchFactory   # Sketch, SketchFactory, GaussianSketchFactory
@@ -69,11 +69,9 @@ def plot_results(
     effective_rank
 ):
     """Plot and save the results."""
-    color_cycle = plt.rcParams["axes.prop_cycle"].by_key()["color"]
     plt.figure(figsize=(len(k_list) * 5, 5))
 
     ### Plot convergence vs iterations
-
     for i in range(len(k_list)):
         plt.subplot(1, len(k_list), i+1)
         t_max = t_max_list[i]
